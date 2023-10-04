@@ -1,0 +1,117 @@
+# Define your variables
+$cluster = "XXX"
+$serviceAccountId = 'User:::XXX'
+$secret = 'XXX'
+$DB_NAME = "XXX"
+$serviceAccountFile = "./SA.json"
+
+# Create a function to get Rubrik API session
+function Get-RubrikAPISession {
+    param(
+        [string]$cluster,
+        [string]$serviceAccountId,
+        [string]$secret
+    )
+
+    $body = @{
+        serviceAccountId = $serviceAccountId
+        secret = $secret
+    }
+
+    $bodyJson = $body | ConvertTo-Json
+
+    $sessionURL = "https://$cluster/api/v1/service_account/session"
+    $rubrikSession = Invoke-RestMethod -Method POST -Uri $sessionURL -Body $bodyJson -ContentType 'application/json' -SkipCertificateCheck
+
+    $rubrikConnection = @{
+        api = 1
+        server = $cluster
+        token = $rubrikSession.token
+        header = @{ 
+            'Authorization' = "Bearer $($rubrikSession.token)"
+        }
+    }
+
+    return $rubrikConnection
+}
+
+# Get Rubrik API session
+$rubrikConnection = Get-RubrikAPISession -cluster $cluster -serviceAccountId $serviceAccountId -secret $secret
+
+# Get-RubrikDatabase now uses the existing API session
+$database = Get-RubrikDatabase -Database $DB_NAME
+
+$cdmDbID = $database.ID.Split(':::') | Select-Object -Last 1
+
+# Read the JSON service account file
+$ServiceAccount = Get-Content $serviceAccountFile | ConvertFrom-Json
+
+# Define GraphQL endpoint
+$uri = "https://XXX.my.rubrik.com/api/graphql"
+
+# Payload to retrieve access token
+$body = @{
+    'client_id' = $ServiceAccount.client_id
+    'client_secret' = $ServiceAccount.client_secret
+}
+
+# Convert body to JSON
+$body = $body | ConvertTo-Json
+
+# Get access token
+$response = Invoke-RestMethod -Body $body -Headers $headers -Method Post -Uri $ServiceAccount.access_token_uri
+
+# Access Token Complete
+$bearerToken = $response.access_token
+$headers = @{
+    "Authorization" = "Bearer $bearerToken"
+    "Content-Type" = "application/json"
+}
+
+# GraphQL Query to get ID for the queried database
+$query_fid = @"
+query {
+    mssqlDatabases(filter:{field: NAME texts: ["$DB_NAME"]}){
+      nodes{
+        cdmId
+        id
+        name
+        isRelic
+      }
+    }
+}
+"@
+
+# Create the body for the GraphQL request
+$body = @{
+    query = $query_fid
+}
+
+# Calling GraphQL endpoint to initiate the Tlog backup
+$result = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body ($body | ConvertTo-Json)
+
+Write-Output ($result | ConvertTo-Json -Depth 100)
+
+$RSC_DB_ID = $result.data.mssqlDatabases.nodes | Where-Object { $_.cdmId -eq $cdmDbID} | Select-Object -ExpandProperty  id
+
+# GraphQL Query for OnDemand backup
+$query = @"
+mutation TakeMssqlLogBackupMutation {
+    takeMssqlLogBackup(input: {
+        id: "$RSC_DB_ID"
+    }) {
+        id
+        __typename
+    }
+}
+"@
+
+# Create the body for the GraphQL request
+$body = @{
+    query = $query
+}
+
+# Calling GraphQL endpoint to initiate the Tlog backup
+$result = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body ($body | ConvertTo-Json)
+
+Write-Output ($result | ConvertTo-Json -Depth 100)
