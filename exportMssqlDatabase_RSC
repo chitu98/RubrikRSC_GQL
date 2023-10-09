@@ -1,0 +1,38 @@
+## Below is the mutation query to perform MSSQL Database Export
+
+Query:
+
+mutation export($input: ExportMssqlDatabaseInput!) {
+  exportMssqlDatabase(input: $input) {
+    id
+    links {
+      href
+      rel
+    }
+    startTime
+    status
+    error {
+      message
+    }
+  }
+}
+
+
+Query Var:
+
+{
+  "input" : {
+    "id": "85fb0f00-2f64-556b-99f8-28d6916dde09",
+   	"config": {
+      "allowOverwrite": true,
+			"finishRecovery": true,
+			"targetDataFilePath": "D:\\SQLDB",
+			"targetLogFilePath": "L:\\SQLDB",
+			"recoveryPoint": {
+				"date": "2023-10-08T18:29:59.000Z"
+      },
+      "targetDatabaseName": "ChitranshExpRSC",
+		  "targetInstanceId": "04206392-af28-58a5-bace-a4e0eef61e29"
+    }
+  }
+}
