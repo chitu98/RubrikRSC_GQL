@@ -1,0 +1,11 @@
+## GQL for Create Report Schedule to share attachement as PDF instead of CSV
+mutation createPDFReportSchedule {
+  createScheduledReport(input: {reportId: 5, title: "compliancePDFtestChitr", dailyTime: "10:40", rubrikRecipientUserIds: [], attachmentTypes: REPORT_ATTACHMENT_TYPE_PDF, nonRubrikRecipientEmails: ["chitransh.rathore@rubrik.com"]}) {
+    scheduledReport {
+      title
+      attachmentTypes
+      reportId
+      recipientEmails
+    }
+  }
+}
